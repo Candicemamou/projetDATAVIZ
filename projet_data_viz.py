@@ -54,15 +54,12 @@ import streamlit as st
 
 @st.cache_data
 def load_data(src: str | None = None, cache_version: int = 1):
-    # 1) URL passée en argument (utile pour tester une URL raw GitHub)
     if src:
         return pd.read_csv(src, sep=None, engine="python", encoding="utf-8")
 
-    # 2) Fichier local, d’abord à côté du script, puis dans le cwd
     try:
         here = Path(__file__).parent
     except NameError:
-        # fallback ultra-robuste si __file__ n'est pas défini
         here = Path.cwd()
 
     candidates = [
@@ -73,17 +70,9 @@ def load_data(src: str | None = None, cache_version: int = 1):
         if p.exists():
             return pd.read_csv(p, sep=None, engine="python", encoding="utf-8")
 
-    # 3) Secret optionnel (Manage app → Settings → Secrets)
-    url = st.secrets.get("DATA_URL", "")
-    if url:
-        return pd.read_csv(url, sep=None, engine="python", encoding="utf-8")
-
-    # 4) Message clair si rien trouvé
-    st.error("❌ CSV introuvable. Place `estat_ilc_iw01_en.csv` dans le repo (même dossier que ce script) "
-             "ou ajoute `DATA_URL` dans Secrets avec le lien vers le CSV.")
+    st.error("Can't find the csv file.")
     st.stop()
 
-# IMPORTANT : change le numéro pour invalider le cache après modif
 raw = load_data(cache_version=2)
 
 
