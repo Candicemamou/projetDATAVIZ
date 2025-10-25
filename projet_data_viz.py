@@ -44,12 +44,32 @@ Data are:
 # Load and clean dataset
 #skeleton required by the teacher
 
-@st.cache_data
-def load_data(path):
-    return pd.read_csv(path, sep=None, engine="python", encoding="utf-8")
+from pathlib import Path
+import pandas as pd
+import streamlit as st
 
-path = r"C:\Users\Candice\Documents\projetDATAVIZ\estat_ilc_iw01_en.csv"
-raw = load_data(path)
+@st.cache_data
+def load_data(src: str | None = None):
+
+    if src:
+        return pd.read_csv(src, sep=None, engine="python", encoding="utf-8")
+
+    local_candidates = [
+        here / "estat_ilc_iw01_en.csv",
+        Path("estat_ilc_iw01_en.csv")
+    ]
+    for p in local_candidates:
+        if p.exists():
+            return pd.read_csv(p, sep=None, engine="python", encoding="utf-8")
+
+    GITHUB_RAW = st.secrets.get("DATA_URL", "")
+    if GITHUB_RAW:
+        return pd.read_csv(GITHUB_RAW, sep=None, engine="python", encoding="utf-8")
+
+    st.error("Can't find th CSV file. Move **estat_ilc_iw01_en.csv** in the repo")
+    st.stop()
+raw = load_data()
+
 
 df = raw.copy()
 df.columns = [c.strip().lower().replace(" ", "_") for c in df.columns]
