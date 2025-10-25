@@ -48,27 +48,43 @@ from pathlib import Path
 import pandas as pd
 import streamlit as st
 
-@st.cache_data
-def load_data(src: str | None = None):
+from pathlib import Path
+import pandas as pd
+import streamlit as st
 
+@st.cache_data
+def load_data(src: str | None = None, cache_version: int = 1):
+    # 1) URL passée en argument (utile pour tester une URL raw GitHub)
     if src:
         return pd.read_csv(src, sep=None, engine="python", encoding="utf-8")
 
-    local_candidates = [
+    # 2) Fichier local, d’abord à côté du script, puis dans le cwd
+    try:
+        here = Path(__file__).parent
+    except NameError:
+        # fallback ultra-robuste si __file__ n'est pas défini
+        here = Path.cwd()
+
+    candidates = [
         here / "estat_ilc_iw01_en.csv",
-        Path("estat_ilc_iw01_en.csv")
+        Path("estat_ilc_iw01_en.csv"),
     ]
-    for p in local_candidates:
+    for p in candidates:
         if p.exists():
             return pd.read_csv(p, sep=None, engine="python", encoding="utf-8")
 
-    GITHUB_RAW = st.secrets.get("DATA_URL", "")
-    if GITHUB_RAW:
-        return pd.read_csv(GITHUB_RAW, sep=None, engine="python", encoding="utf-8")
+    # 3) Secret optionnel (Manage app → Settings → Secrets)
+    url = st.secrets.get("DATA_URL", "")
+    if url:
+        return pd.read_csv(url, sep=None, engine="python", encoding="utf-8")
 
-    st.error("Can't find th CSV file. Move **estat_ilc_iw01_en.csv** in the repo")
+    # 4) Message clair si rien trouvé
+    st.error("❌ CSV introuvable. Place `estat_ilc_iw01_en.csv` dans le repo (même dossier que ce script) "
+             "ou ajoute `DATA_URL` dans Secrets avec le lien vers le CSV.")
     st.stop()
-raw = load_data()
+
+# IMPORTANT : change le numéro pour invalider le cache après modif
+raw = load_data(cache_version=2)
 
 
 df = raw.copy()
@@ -503,7 +519,7 @@ with tabs[8]:
         .dropna(subset=["obs_value"])
     )
 
-    df_map["iso3"] = df_map["geo"].apply(lambda x: pycountry.countries.get(alpha_2=x).alpha_3 if pycountry.countries.get(alpha_2=x) else None)
+    df_map["iso3"] = df_map["geo"].apply(to_iso3)
     df_map = df_map.dropna(subset=["iso3"])
 
     if not df_map.empty:
@@ -523,21 +539,34 @@ with tabs[8]:
 with tabs[9]:
     st.markdown("## What can we learn from this?")
 
-    try:
-        
-        st.success(f"""
-**Main findings:**
-- The EU average in-work poverty rate in **{selected_year}** is **{eu_avg:.1f}%**.  
-- **{selected_country}** stands {'above' if (country_avg - eu_avg) > 0 else 'below'} the EU average by **{abs(country_avg - eu_avg):.1f} points**.  
-- Differences by gender and age reflect structural inequalities in the labor market.
+    # Recalcul local (scope) des KPI pour l'année sélectionnée
+    eu_avg_c = df[
+        (df["sex"] == selected_sex) &
+        (df["age_label"] == selected_age_label) &
+        (df["year"] == selected_year)
+    ]["obs_value"].mean()
+
+    country_avg_c = df[
+        (df["country"] == selected_country) &
+        (df["sex"] == selected_sex) &
+        (df["age_label"] == selected_age_label) &
+        (df["year"] == selected_year)
+    ]["obs_value"].mean()
+
+    diff_c = country_avg_c - eu_avg_c
+
+    st.success(f"""
+**Main findings ({selected_year}):**
+- EU average: **{eu_avg_c:.1f}%**
+- {selected_country}: **{country_avg_c:.1f}%**
+- Difference vs EU: **{diff_c:+.1f} points**
 """)
-        st.markdown("### Fun facts :")
-        st.info(
+
+    st.markdown("### Fun facts :")
+    st.info(
         "**Did you know?**\n"
         "- Even full-time workers can be at risk of poverty if wages are below living standards.\n"
         "- In 2022, over 9% of employed people in the EU were still living at risk of poverty.\n"
         "- Nordic countries tend to have the lowest in-work poverty rates in Europe.\n"
         "- Gender gaps in poverty are often linked to part-time work and care responsibilities."
     )
-    except Exception:
-        st.info("Complete the selections in the left sidebar to see the summary.")
